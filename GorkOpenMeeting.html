@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>O&T TJR Pre-operative Meeting 手術清單統整工具 (OpenRouter)</title>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --primary: #1a56db;
+      --primary-dark: #1e429f;
+      --success: #057a55;
+      --danger: #c81e1e;
+      --bg: #f3f4f6;
+      --card: #ffffff;
+      --border: #d1d5db;
+      --text: #111827;
+      --muted: #6b7280;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    .container { max-width: 1280px; margin: 0 auto; padding: 16px; }
+    header {
+      background: linear-gradient(135deg, #1e3a8a, #1a56db);
+      color: white;
+      padding: 20px 16px;
+      text-align: center;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    header h1 { font-size: 1.45rem; font-weight: 700; margin-bottom: 4px; }
+    header p { font-size: 0.9rem; opacity: 0.9; }
+    .card {
+      background: var(--card);
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .card h2 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: var(--primary-dark);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 28px 16px;
+      text-align: center;
+      background: #f9fafb;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+    .upload-zone.dragover {
+      border-color: var(--primary);
+      background: #eff6ff;
+    }
+    .upload-zone p { color: var(--muted); margin: 6px 0; font-size: 0.95rem; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-dark); }
+    .btn-success { background: var(--success); color: white; }
+    .btn-success:hover:not(:disabled) { background: #046c4e; }
+    .btn-outline {
+      background: white;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn-outline:hover:not(:disabled) { background: #f9fafb; }
+    .btn-danger { background: #fee2e2; color: var(--danger); }
+    .btn-sm { padding: 6px 12px; font-size: 0.85rem; }
+    .preview-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .preview-item {
+      position: relative;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: white;
+    }
+    .preview-item img {
+      width: 100%;
+      height: 110px;
+      object-fit: cover;
+      display: block;
+    }
+    .preview-item .info {
+      padding: 6px 8px;
+      font-size: 0.75rem;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .preview-item .remove {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: rgba(0,0,0,0.6);
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+      align-items: center;
+    }
+    .status {
+      margin-top: 12px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      display: none;
+    }
+    .status.info { background: #eff6ff; color: #1e40af; display: block; }
+    .status.success { background: #ecfdf5; color: #065f46; display: block; }
+    .status.error { background: #fef2f2; color: #991b1b; display: block; }
+    .status.warning { background: #fffbeb; color: #92400e; display: block; }
+    .table-wrap {
+      overflow-x: auto;
+      margin-top: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      min-width: 900px;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      background: #dbeafe;
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      white-space: nowrap;
+    }
+    td { white-space: pre-wrap; }
+    tr:nth-child(even) { background: #f9fafb; }
+    .editable { outline: none; min-height: 1.2em; }
+    .editable:focus { background: #fefce8; }
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 12px;
+      align-items: center;
+    }
+    .meta-row label { font-size: 0.9rem; font-weight: 500; }
+    .meta-row input, .meta-row select {
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.9rem;
+      min-width: 180px;
+    }
+    .api-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 640px) {
+      .api-row { grid-template-columns: 1fr; }
+    }
+    .api-row label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+    .api-row input, .api-row select {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
+    .rules-box {
+      font-size: 0.8rem;
+      color: var(--muted);
+      background: #f8fafc;
+      border-left: 3px solid var(--primary);
+      padding: 10px 14px;
+      margin-top: 12px;
+      border-radius: 0 6px 6px 0;
+    }
+    .rules-box ul { margin: 6px 0 0 18px; }
+    footer {
+      text-align: center;
+      padding: 20px;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .progress-bar {
+      height: 6px;
+      background: #e5e7eb;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 10px;
+      display: none;
+    }
+    .progress-bar .fill {
+      height: 100%;
+      background: var(--primary);
+      width: 0%;
+      transition: width 0.3s;
+    }
+    .hint {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>O&amp;T TJR Pre-operative Meeting</h1>
+    <p>手術清單統整工具 · OpenRouter Vision · 多圖上傳 · Excel 下載</p>
+  </header>
+
+  <div class="container">
+    <!-- API Config -->
+    <div class="card">
+      <h2>① OpenRouter 設定</h2>
+      <div class="api-row">
+        <div>
+          <label>OpenRouter API Key</label>
+          <input type="password" id="apiKey" placeholder="sk-or-v1-..." autocomplete="off" />
+          <div class="hint">只存在瀏覽器記憶體，重新整理後會消失，不會儲存</div>
+        </div>
+        <div>
+          <label>Vision 模型</label>
+          <select id="modelSelect">
+            <optgroup label="—— 免費模型（建議先用）——">
+              <option value="nvidia/nemotron-3.5-super-vl:free" selected>nvidia/nemotron-3.5-super-vl:free（推薦免費）</option>
+              <option value="google/gemma-4-31b-it:free">google/gemma-4-31b-it:free</option>
+              <option value="google/gemma-4-26b-a4b-it:free">google/gemma-4-26b-a4b-it:free</option>
+              <option value="thinkingmachines/inkling-small:free">thinkingmachines/inkling-small:free</option>
+              <option value="thinkingmachines/inkling:free">thinkingmachines/inkling:free</option>
+              <option value="nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free">nvidia/nemotron-3-nano-omni:free</option>
+              <option value="openrouter/free">openrouter/free（自動揀免費模型）</option>
+            </optgroup>
+            <optgroup label="—— 付費模型（準確度較高）——">
+              <option value="google/gemini-2.5-flash">google/gemini-2.5-flash</option>
+              <option value="openai/gpt-4o-mini">openai/gpt-4o-mini</option>
+              <option value="openai/gpt-4o">openai/gpt-4o</option>
+              <option value="anthropic/claude-3.5-sonnet">anthropic/claude-3.5-sonnet</option>
+              <option value="x-ai/grok-2-vision-1212">x-ai/grok-2-vision-1212</option>
+            </optgroup>
+          </select>
+          <div class="hint">免費額度通常每日約 50 次請求。每張圖片 = 1 次請求。可自行輸入其他 model id。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Upload Section -->
+    <div class="card">
+      <h2>② 上傳手術單圖片</h2>
+      <div class="upload-zone" id="dropZone">
+        <p style="font-size:1.4rem;">📁</p>
+        <p><strong>點擊或拖曳多張圖片到此處</strong></p>
+        <p>支援 JPG / PNG / WEBP · 單張 ≤ 10MB · 每批最多 20 張</p>
+        <p style="font-size:0.8rem;margin-top:8px;">圖片只在按下「開始分析」時才會送到 OpenRouter，不會寫入本機儲存</p>
+        <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp" multiple hidden />
+      </div>
+      <div class="preview-grid" id="previewGrid"></div>
+      <div class="controls">
+        <button class="btn btn-primary" id="analyzeBtn" disabled>開始分析並統整</button>
+        <button class="btn btn-outline" id="clearBtn" disabled>清除全部</button>
+        <span id="fileCount" style="font-size:0.9rem;color:var(--muted);"></span>
+      </div>
+      <div class="progress-bar" id="progressBar"><div class="fill" id="progressFill"></div></div>
+      <div class="status" id="status"></div>
+      <div class="rules-box">
+        <strong>提取規則（已寫入 system prompt）：</strong>
+        <ul>
+          <li>固定 7 欄：Date / Name / Diagnosis / Operation / Instrument / Surgeon / Remarks</li>
+          <li>Remarks 只保留白名單：Transamin IA、LIA (含括號內容)、Antibiotics Cement、T&amp;S</li>
+          <li>Name 空白或裁切 → 「待核對」；不猜測任何資料</li>
+          <li>多圖合併後按日期排序，同日依圖片加入順序 + 圖片內上下順序</li>
+          <li>同日自動加 Sales @ 09:00 / 11:00 / 14:00（第 4 台起不再加）</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Result Section -->
+    <div class="card" id="resultCard" style="display:none;">
+      <h2>③ 統整結果</h2>
+      <div class="meta-row">
+        <div>
+          <label>O.T. Staff：</label>
+          <input type="text" id="otStaff" placeholder="例如：Lee On Yee" value="Lee On Yee" />
+        </div>
+        <div>
+          <label>清單日期：</label>
+          <input type="text" id="listDate" placeholder="DD/MM/YYYY" value="" />
+        </div>
+        <button class="btn btn-success" id="downloadBtn">📥 下載 Excel (.xlsx)</button>
+        <button class="btn btn-outline btn-sm" id="addRowBtn">+ 新增一列</button>
+      </div>
+      <p style="font-size:0.85rem;color:var(--muted);margin-bottom:8px;">表格可直接點擊編輯。相同日期會在 Excel 中自動合併。</p>
+      <div class="table-wrap">
+        <table id="resultTable">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Name</th>
+              <th>Diagnosis</th>
+              <th>Operation</th>
+              <th>Instrument</th>
+              <th>Surgeon</th>
+              <th>Remarks</th>
+              <th style="width:60px;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="resultBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    本工具依「手術資料自動化提取及 Excel 格式化」規則設計 · 僅供內部術前會議使用 · 請人工核對所有資料<br>
+    圖片只在分析時傳送到 OpenRouter，不會永久儲存
+  </footer>
+
+  <script>
+    // ========== State ==========
+    let files = [];          // {file, url, id, name}
+    let extractedRows = [];  // final 7-col data
+    const MAX_FILES = 20;
+    const MAX_SIZE = 10 * 1024 * 1024;
+
+    // ========== DOM ==========
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const previewGrid = document.getElementById('previewGrid');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const fileCount = document.getElementById('fileCount');
+    const statusEl = document.getElementById('status');
+    const progressBar = document.getElementById('progressBar');
+    const progressFill = document.getElementById('progressFill');
+    const resultCard = document.getElementById('resultCard');
+    const resultBody = document.getElementById('resultBody');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const addRowBtn = document.getElementById('addRowBtn');
+    const otStaffInput = document.getElementById('otStaff');
+    const listDateInput = document.getElementById('listDate');
+    const apiKeyInput = document.getElementById('apiKey');
+    const modelSelect = document.getElementById('modelSelect');
+
+    // Default list date
+    const today = new Date();
+    listDateInput.value = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
+
+    // ========== Upload handlers ==========
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      handleFiles(e.dataTransfer.files);
+    });
+    fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+    function handleFiles(fileList) {
+      const incoming = Array.from(fileList);
+      for (const f of incoming) {
+        if (files.length >= MAX_FILES) {
+          showStatus('已達每批最多 20 張限制', 'warning');
+          break;
+        }
+        if (!['image/jpeg','image/png','image/webp'].includes(f.type)) {
+          showStatus(`跳過不支援格式：${f.name}`, 'warning');
+          continue;
+        }
+        if (f.size > MAX_SIZE) {
+          showStatus(`跳過超過 10MB：${f.name}`, 'warning');
+          continue;
+        }
+        const id = Date.now() + Math.random().toString(36).slice(2);
+        const url = URL.createObjectURL(f);
+        files.push({ file: f, url, id, name: f.name });
+      }
+      renderPreviews();
+      updateButtons();
+    }
+
+    function renderPreviews() {
+      previewGrid.innerHTML = '';
+      files.forEach((item, idx) => {
+        const div = document.createElement('div');
+        div.className = 'preview-item';
+        div.innerHTML = `
+          <img src="${item.url}" alt="${item.name}" />
+          <div class="info">${idx+1}. ${item.name}</div>
+          <button class="remove" data-id="${item.id}" title="移除">×</button>
+        `;
+        previewGrid.appendChild(div);
+      });
+      previewGrid.querySelectorAll('.remove').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          const id = btn.dataset.id;
+          const target = files.find(f => f.id === id);
+          if (target) URL.revokeObjectURL(target.url);
+          files = files.filter(f => f.id !== id);
+          renderPreviews();
+          updateButtons();
+        });
+      });
+      fileCount.textContent = files.length ? `已選 ${files.length} 張` : '';
+    }
+
+    function updateButtons() {
+      analyzeBtn.disabled = files.length === 0;
+      clearBtn.disabled = files.length === 0;
+    }
+
+    clearBtn.addEventListener('click', () => {
+      files.forEach(f => URL.revokeObjectURL(f.url));
+      files = [];
+      renderPreviews();
+      updateButtons();
+      resultCard.style.display = 'none';
+      extractedRows = [];
+      hideStatus();
+    });
+
+    // ========== System Prompt (完整規則) ==========
+    const SYSTEM_PROMPT = `你是專業的手術單資料提取助手。請嚴格按照以下規則從圖片中提取資料，只輸出 JSON，不要加任何其他文字或 markdown。
+
+輸出格式必須是：
+{
+  "page_date": "手術日期（優先用右上角或頁首的手術日期，格式盡量保留原文，例如 6 OCT 2026 或 06/10/2026）",
+  "rows": [
+    {
+      "date": "手術日期",
+      "name": "病人姓名（如果欄位空白或被裁切就填「待核對」，絕對不要猜測）",
+      "diagnosis": "診斷（OA 整理成 OA，有左右就保留，例如 Right OA / Left OA）",
+      "operation": "手術（保留縮寫 TKR/THR/UKR 等，有左右就保留）",
+      "instrument": "器械/植入物（盡量保留原文品牌、型號、尺寸、cemented/cementless 等）",
+      "surgeon": "所有可見醫生姓名，多位用 \\n 分隔，保留原本順序",
+      "remarks_raw": "Remarks 欄完整原文（之後會過濾）"
+    }
+  ]
+}
+
+重要規則：
+1. 每一台手術輸出一筆，不要把相鄰列混合。
+2. 如果右上角有明確手術日期，套用到該圖所有手術列。忽略建立時間、列印時間、簽名時間。
+3. Name：只保留清楚可見的姓名，否則「待核對」。不提取病歷號、身份證、電話、地址。
+4. Diagnosis：osteoarthritis 或 OA → OA，有左右就保留。
+5. Operation：保留來源縮寫（TKR/THR/UKR/TJR 等），有左右就保留。來源寫全名就整理成縮寫。
+6. Instrument：優先讀 Inst./Equipment 欄，逐字保留品牌、系列、型號。如果沒有器械欄，只從 Remarks 中明確可見的器械名稱放入。
+7. Surgeon：保留所有清楚可見的醫生姓名，多位逐行，不只取第一位。
+8. 不要猜測任何資料。日期無法辨識就標記「待核對」。
+9. 只輸出合法 JSON，不要用 \`\`\`json 包裹。`;
+
+    // ========== Analysis with OpenRouter ==========
+    analyzeBtn.addEventListener('click', async () => {
+      const apiKey = apiKeyInput.value.trim();
+      if (!apiKey) {
+        showStatus('請先輸入 OpenRouter API Key', 'error');
+        return;
+      }
+      if (files.length === 0) return;
+
+      analyzeBtn.disabled = true;
+      showStatus('正在把圖片送到 OpenRouter 分析…', 'info');
+      progressBar.style.display = 'block';
+      progressFill.style.width = '5%';
+
+      const model = modelSelect.value;
+      const allRows = [];
+      let successCount = 0;
+
+      try {
+        for (let i = 0; i < files.length; i++) {
+          const item = files[i];
+          showStatus(`正在分析第 ${i+1}/${files.length} 張：${item.name}`, 'info');
+          progressFill.style.width = `${5 + (i / files.length) * 80}%`;
+
+          const base64 = await fileToBase64(item.file);
+          const mime = item.file.type || 'image/jpeg';
+
+          const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': window.location.href || 'https://localhost',
+              'X-Title': 'O&T TJR Pre-op Meeting Tool'
+            },
+            body: JSON.stringify({
+              model: model,
+              messages: [
+                { role: 'system', content: SYSTEM_PROMPT },
+                {
+                  role: 'user',
+                  content: [
+                    {
+                      type: 'text',
+                      text: '請仔細分析這張手術單圖片，依照 system 規則提取所有手術資料，只輸出 JSON。'
+                    },
+                    {
+                      type: 'image_url',
+                      image_url: {
+                        url: `data:${mime};base64,${base64}`
+                      }
+                    }
+                  ]
+                }
+              ],
+              temperature: 0.1,
+              max_tokens: 4000
+            })
+          });
+
+          if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`OpenRouter 錯誤 (${response.status}): ${errText.slice(0, 200)}`);
+          }
+
+          const data = await response.json();
+          const content = data.choices?.[0]?.message?.content || '';
+          
+          // 清理可能的 markdown code block
+          let jsonStr = content.trim();
+          if (jsonStr.startsWith('```')) {
+            jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+          }
+
+          let parsed;
+          try {
+            parsed = JSON.parse(jsonStr);
+          } catch (e) {
+            console.warn('JSON parse failed for', item.name, content);
+            showStatus(`第 ${i+1} 張解析失敗，已跳過。模型回傳：${content.slice(0, 100)}...`, 'warning');
+            continue;
+          }
+
+          const pageDate = parsed.page_date || '';
+          const rows = Array.isArray(parsed.rows) ? parsed.rows : [];
+          
+          rows.forEach((r, rowIdx) => {
+            allRows.push({
+              date: (r.date || pageDate || '待核對').trim(),
+              name: (r.name || '待核對').trim() || '待核對',
+              diagnosis: (r.diagnosis || '').trim(),
+              operation: (r.operation || '').trim(),
+              instrument: (r.instrument || '').trim(),
+              surgeon: (r.surgeon || '').trim(),
+              remarks_raw: (r.remarks_raw || '').trim(),
+              _imageOrder: i,
+              _rowOrder: rowIdx
+            });
+          });
+          successCount++;
+        }
+
+        // 後處理：過濾 Remarks + 加 Sales + 排序
+        extractedRows = postProcess(allRows);
+
+        progressFill.style.width = '100%';
+        renderResultTable();
+        resultCard.style.display = 'block';
+        showStatus(`分析完成：成功處理 ${successCount}/${files.length} 張，共 ${extractedRows.length} 台手術。請人工核對。`, 'success');
+      } catch (err) {
+        console.error(err);
+        showStatus('分析失敗：' + err.message, 'error');
+      } finally {
+        analyzeBtn.disabled = false;
+        progressBar.style.display = 'none';
+        progressFill.style.width = '0%';
+      }
+    });
+
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result;
+          // remove data:image/...;base64, prefix
+          const base64 = result.split(',')[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // ========== Post-process according to rules ==========
+    function postProcess(rawRows) {
+      // 1. Filter Remarks to whitelist only
+      const whitelist = [
+        /transamin\s*ia/i,
+        /lia\s*(\([^)]*\))?/i,
+        /antibiotics?\s*cement/i,
+        /t\s*&\s*s/i
+      ];
+
+      rawRows.forEach(r => {
+        const lines = (r.remarks_raw || '').split(/[\n,;\/]+/).map(s => s.trim()).filter(Boolean);
+        const kept = [];
+        lines.forEach(line => {
+          for (const re of whitelist) {
+            if (re.test(line)) {
+              // 保留完整匹配的部分
+              const m = line.match(re);
+              if (m) kept.push(m[0].trim());
+              break;
+            }
+          }
+        });
+        // 也嘗試從整段文字抓 LIA (xxx)
+        const liaMatch = (r.remarks_raw || '').match(/LIA\s*\([^)]+\)/i);
+        if (liaMatch && !kept.some(k => /lia/i.test(k))) kept.push(liaMatch[0]);
+
+        r.remarks = [...new Set(kept)].join('\n');
+        delete r.remarks_raw;
+      });
+
+      // 2. Sort: date ascending, then image order, then row order
+      rawRows.sort((a, b) => {
+        const da = parseDateKey(a.date);
+        const db = parseDateKey(b.date);
+        if (da !== db) return da - db;
+        if (a._imageOrder !== b._imageOrder) return a._imageOrder - b._imageOrder;
+        return a._rowOrder - b._rowOrder;
+      });
+
+      // 3. Add Sales times per day
+      const dayCounter = {};
+      rawRows.forEach(r => {
+        const key = r.date || 'unknown';
+        if (!dayCounter[key]) dayCounter[key] = 0;
+        dayCounter[key]++;
+        const n = dayCounter[key];
+        let sales = '';
+        if (n === 1) sales = 'Sales @ 0900';
+        else if (n === 2) sales = 'Sales @ 1100';
+        else if (n === 3) sales = 'Sales @ 1400';
+        // 第4台起不加
+
+        if (sales) {
+          r.remarks = r.remarks ? (r.remarks + '\n' + sales) : sales;
+        }
+      });
+
+      // clean internal fields
+      return rawRows.map(r => ({
+        date: r.date,
+        name: r.name,
+        diagnosis: r.diagnosis,
+        operation: r.operation,
+        instrument: r.instrument,
+        surgeon: r.surgeon,
+        remarks: r.remarks
+      }));
+    }
+
+    function parseDateKey(str) {
+      if (!str || str === '待核對') return 99999999;
+      // try to extract numbers
+      const m = str.match(/(\d{1,2})\s*(OCT|SEP|NOV|DEC|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG)/i) ||
+                str.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+      if (!m) return 80000000;
+      // rough numeric key for sorting
+      const monthMap = {JAN:1,FEB:2,MAR:3,APR:4,MAY:5,JUN:6,JUL:7,AUG:8,SEP:9,OCT:10,NOV:11,DEC:12};
+      if (m[2] && monthMap[m[2].toUpperCase()]) {
+        return 2026 * 10000 + monthMap[m[2].toUpperCase()] * 100 + parseInt(m[1],10);
+      }
+      if (m[3]) {
+        const y = parseInt(m[3],10) < 100 ? 2000 + parseInt(m[3],10) : parseInt(m[3],10);
+        return y * 10000 + parseInt(m[2],10) * 100 + parseInt(m[1],10);
+      }
+      return 80000000;
+    }
+
+    // ========== Render editable table ==========
+    function renderResultTable() {
+      resultBody.innerHTML = '';
+      extractedRows.forEach((row, idx) => {
+        const tr = document.createElement('tr');
+        tr.dataset.idx = idx;
+        tr.innerHTML = `
+          <td class="editable" contenteditable="true" data-field="date">${esc(row.date)}</td>
+          <td class="editable" contenteditable="true" data-field="name">${esc(row.name)}</td>
+          <td class="editable" contenteditable="true" data-field="diagnosis">${esc(row.diagnosis)}</td>
+          <td class="editable" contenteditable="true" data-field="operation">${esc(row.operation)}</td>
+          <td class="editable" contenteditable="true" data-field="instrument">${esc(row.instrument)}</td>
+          <td class="editable" contenteditable="true" data-field="surgeon">${esc(row.surgeon)}</td>
+          <td class="editable" contenteditable="true" data-field="remarks">${esc(row.remarks)}</td>
+          <td><button class="btn btn-danger btn-sm del-btn">刪</button></td>
+        `;
+        resultBody.appendChild(tr);
+      });
+
+      resultBody.querySelectorAll('.editable').forEach(cell => {
+        cell.addEventListener('blur', () => {
+          const tr = cell.closest('tr');
+          const idx = +tr.dataset.idx;
+          const field = cell.dataset.field;
+          extractedRows[idx][field] = cell.innerText.trim();
+        });
+      });
+      resultBody.querySelectorAll('.del-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const tr = btn.closest('tr');
+          const idx = +tr.dataset.idx;
+          extractedRows.splice(idx, 1);
+          renderResultTable();
+        });
+      });
+    }
+
+    function esc(s) {
+      return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    addRowBtn.addEventListener('click', () => {
+      extractedRows.push({
+        date: "", name: "待核對", diagnosis: "", operation: "",
+        instrument: "", surgeon: "", remarks: ""
+      });
+      renderResultTable();
+    });
+
+    // ========== Excel Download ==========
+    downloadBtn.addEventListener('click', () => {
+      if (extractedRows.length === 0) {
+        showStatus('沒有資料可下載', 'warning');
+        return;
+      }
+
+      const otStaff = otStaffInput.value.trim() || "________________";
+      const listDate = listDateInput.value.trim() || "";
+
+      const aoa = [
+        ["O&T TJR Pre-operative Meeting"],
+        [`Name of O.T. Staff: ${otStaff}          Date: ${listDate}`],
+        ["Date", "Name", "Diagnosis", "Operation", "Instrument", "Surgeon", "Remarks"]
+      ];
+
+      extractedRows.forEach(r => {
+        aoa.push([
+          r.date || "",
+          r.name || "",
+          r.diagnosis || "",
+          r.operation || "",
+          r.instrument || "",
+          r.surgeon || "",
+          r.remarks || ""
+        ]);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = [
+        { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+        { wch: 28 }, { wch: 22 }, { wch: 28 }
+      ];
+      ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } }
+      ];
+
+      // merge consecutive same dates
+      let start = 3;
+      for (let i = 3; i < aoa.length; i++) {
+        if (i === aoa.length - 1 || aoa[i][0] !== aoa[i + 1][0]) {
+          if (i > start) {
+            ws['!merges'].push({ s: { r: start, c: 0 }, e: { r: i, c: 0 } });
+          }
+          start = i + 1;
+        }
+      }
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "O&T TJR Pre-op");
+      const fname = `O&T_TJR_Preoperative_Meeting_${listDate.replace(/\//g,'-') || 'List'}.xlsx`;
+      XLSX.writeFile(wb, fname);
+      showStatus('Excel 已下載', 'success');
+    });
+
+    function showStatus(msg, type) {
+      statusEl.textContent = msg;
+      statusEl.className = 'status ' + type;
+    }
+    function hideStatus() {
+      statusEl.className = 'status';
+      statusEl.textContent = '';
+    }
+  </script>
+</body>
+</html>
